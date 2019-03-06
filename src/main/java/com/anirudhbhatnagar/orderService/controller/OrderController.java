@@ -12,6 +12,7 @@ import com.netflix.hystrix.contrib.javanica.annotation.HystrixCommand;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.annotation.CreatedDate;
+import org.springframework.data.crossstore.ChangeSetPersister.NotFoundException;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -19,8 +20,10 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.client.RestTemplate;
 
 import java.math.BigDecimal;
+import java.sql.SQLException;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Date;
@@ -35,11 +38,15 @@ import javax.persistence.Id;
 import javax.persistence.OneToMany;
 
 @RestController
-@RequestMapping("/api/orders")
+//@RequestMapping("/api/orders")
 public class OrderController {
 
 	private OrderRepository orderRepository;
 	private ProductServiceProxy productServiceProxy;
+
+	@Autowired
+
+	 private RestTemplate restTemplate;
 
 	@Autowired
 	public OrderController(OrderRepository orderRepository, ProductServiceProxy productServiceProxy) {
@@ -47,29 +54,35 @@ public class OrderController {
 		this.productServiceProxy = productServiceProxy;
 	}
 
-	@GetMapping // ("/orders")
+	@GetMapping("/orders")
 	public List<CustomerOrderDetails> getCustomerOrders(@RequestParam String customerId) {
 		final List<Order> order = orderRepository.findByCustomerId(customerId);
 		return order.stream().map(o -> toCustomerOrderDetails(o)).collect(Collectors.toList());
 	}
 
-	@GetMapping("/{id}")
+	@GetMapping("/orders/{id}")
 	@HystrixCommand(fallbackMethod = "fallbackGetOrders")
-	public CustomerOrderDetails getOrders(@PathVariable("id") Long orderId) {
+	public CustomerOrderDetails getOrders(@PathVariable("id") Long orderId) throws Exception {
+
 		final Order order = orderRepository.findById(orderId).orElse(null);
+
 		if (order == null) {
 			return null;
 		}
-		return toCustomerOrderDetails(order);
+
+		{
+
+			return toCustomerOrderDetails(order);
+		}
 	}
 
 	// fallback method of getOrders
 	public CustomerOrderDetails fallbackGetOrders(Long orderId) {
 
-		//CustomerOrderDetails orderDetails =
-			
-			return  CustomerOrderDetails.builder().orderId(00L).createdDate(null)
-						.externalReference("not available").items(null).build();
+		CustomerOrderDetails orderDetails = CustomerOrderDetails.builder().orderId(0L)
+				.externalReference("not available").items(null).build();
+
+		return orderDetails;
 
 	}
 
@@ -83,11 +96,17 @@ public class OrderController {
 	}
 
 	private com.anirudhbhatnagar.orderService.dto.product.Item toItemDto(Item item) {
+		
+		
+		String uri = "http://localhost:8001/api/products" + ;
+		
+		
+		
 		return com.anirudhbhatnagar.orderService.dto.product.Item.builder()
 				.product(productServiceProxy.getProduct(item.getProductId())).build();
 	}
 
-	@PostMapping // ("/orders")
+	@PostMapping("/orders")
 	public Order save(@RequestBody CustomerOrderRequest request) {
 		return orderRepository.save(
 				Order.builder().customerId(request.getCustomerId()).externalReference(request.getExternalReference())
